@@ -1,0 +1,44 @@
+{
+  "name": "pharmacy-pos-backend",
+  "version": "1.0.0",
+  "description": "Express.js REST API backend for Pharmacy POS System",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "db:sync": "node src/database/sync.js",
+    "db:seed": "node src/database/seedDatabase.js",
+    "db:create": "node src/database/createDatabase.js"
+  },
+  "keywords": [
+    "pharmacy",
+    "pos",
+    "api",
+    "express",
+    "rest"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "compression": "^1.7.4",
+    "morgan": "^1.10.0",
+    "jsonwebtoken": "^9.0.2",
+    "bcrypt": "^5.1.1",
+    "express-validator": "^7.0.1",
+    "cookie-parser": "^1.4.6",
+    "dotenv": "^16.3.1",
+    "sequelize": "^6.35.0",
+    "mysql2": "^3.6.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
