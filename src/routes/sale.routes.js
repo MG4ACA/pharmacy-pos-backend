@@ -20,7 +20,7 @@ router.get(
   paginationValidation,
   validate,
   asyncHandler(async (req, res) => {
-    const result = await SaleController.getSaleHistory(req.query);
+    const result = await SaleController.getSalesHistory(req.query);
     return res.json(result);
   })
 );

@@ -14,14 +14,14 @@ class MetaController {
 
       return {
         success: true,
-        productTypes: productTypes,
+        data: productTypes,
       };
     } catch (error) {
       console.error('Get product types error:', error);
       return {
         success: false,
         message: 'Failed to fetch product types',
-        productTypes: [],
+        data: [],
       };
     }
   }
@@ -39,14 +39,14 @@ class MetaController {
 
       return {
         success: true,
-        categories: categories,
+        data: categories,
       };
     } catch (error) {
       console.error('Get categories error:', error);
       return {
         success: false,
         message: 'Failed to fetch categories',
-        categories: [],
+        data: [],
       };
     }
   }

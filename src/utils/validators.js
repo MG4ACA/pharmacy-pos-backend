@@ -66,13 +66,29 @@ export const createSaleValidation = [
   body('items').isArray({ min: 1 }).withMessage('At least one item is required'),
   body('items.*.product_id').isInt().withMessage('Valid product ID is required'),
   body('items.*.quantity').isInt({ min: 1 }).withMessage('Quantity must be at least 1'),
-  body('items.*.unit_price').isFloat({ min: 0 }).withMessage('Unit price must be positive'),
+  // body('items.*.unit_price').isFloat({ min: 0 }).withMessage('Unit price must be positive'),
   body('payment_method')
     .isIn(['cash', 'card', 'mobile'])
     .withMessage('Valid payment method is required'),
-  body('payment_status')
-    .isIn(['paid', 'partial', 'pending'])
-    .withMessage('Valid payment status is required'),
+  // body('payment_status')
+  //   .isIn(['paid', 'partial', 'pending'])
+  //   .withMessage('Valid payment status is required'),
+];
+
+/**
+ * Stock Receipt Validation
+ */
+export const createStockReceiptValidation = [
+  body('header.supplierId').isInt().withMessage('Valid supplier ID is required'),
+  body('header.receiptDate').notEmpty().withMessage('Receipt date is required'),
+  body('entries').isArray({ min: 1 }).withMessage('At least one product line is required'),
+  body('entries.*.productId').isInt().withMessage('Valid product ID is required'),
+  body('entries.*.batchNumber').trim().notEmpty().withMessage('Batch number is required'),
+  body('entries.*.quantity').isInt({ min: 1 }).withMessage('Quantity must be at least 1'),
+  body('entries.*.costPrice').isFloat({ min: 0.01 }).withMessage('Cost price must be positive'),
+  body('entries.*.sellingPrice')
+    .isFloat({ min: 0.01 })
+    .withMessage('Selling price must be positive'),
 ];
 
 /**
@@ -98,6 +114,7 @@ export default {
   updateProductValidation,
   createSupplierValidation,
   createSaleValidation,
+  createStockReceiptValidation,
   idValidation,
   paginationValidation,
 };

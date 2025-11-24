@@ -3,7 +3,11 @@ import StockReceiptController from '../controllers/StockReceiptController.js';
 import { authenticate } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { idValidation, paginationValidation } from '../utils/validators.js';
+import {
+  createStockReceiptValidation,
+  idValidation,
+  paginationValidation,
+} from '../utils/validators.js';
 
 const router = express.Router();
 
@@ -48,7 +52,7 @@ router.get(
   idValidation,
   validate,
   asyncHandler(async (req, res) => {
-    const result = await StockReceiptController.getStockReceiptsBySupplier(req.params.id);
+    const result = await StockReceiptController.getReceiptsBySupplier(req.params.id);
     return res.json(result);
   })
 );
@@ -63,7 +67,7 @@ router.get(
   idValidation,
   validate,
   asyncHandler(async (req, res) => {
-    const result = await StockReceiptController.getStockReceiptById(req.params.id);
+    const result = await StockReceiptController.getReceiptById(req.params.id);
 
     if (result.success) {
       return res.json(result);
@@ -80,8 +84,10 @@ router.get(
  */
 router.post(
   '/',
+  createStockReceiptValidation,
+  validate,
   asyncHandler(async (req, res) => {
-    const result = await StockReceiptController.createStockReceipt(req.body);
+    const result = await StockReceiptController.createReceipt(req.body);
 
     if (result.success) {
       return res.status(201).json(result);
@@ -101,7 +107,7 @@ router.put(
   idValidation,
   validate,
   asyncHandler(async (req, res) => {
-    const result = await StockReceiptController.updateStockReceipt(req.params.id, req.body);
+    const result = await StockReceiptController.updateReceipt(req.params.id, req.body);
 
     if (result.success) {
       return res.json(result);
@@ -121,7 +127,7 @@ router.delete(
   idValidation,
   validate,
   asyncHandler(async (req, res) => {
-    const result = await StockReceiptController.cancelStockReceipt(req.params.id);
+    const result = await StockReceiptController.cancelReceipt(req.params.id);
 
     if (result.success) {
       return res.json(result);
