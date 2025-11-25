@@ -1,5 +1,7 @@
 import bcrypt from 'bcrypt';
 import { Category, ProductType, Supplier, User } from './models/index.js';
+import { categories } from './seeders/categories.js';
+import { productTypes } from './seeders/productTypes.js';
 
 /**
  * Seed Database with Initial Data
@@ -29,27 +31,13 @@ async function seedDatabase() {
 
     // Create default categories
     console.log('Creating default categories...');
-    const categories = await Category.bulkCreate([
-      { name: 'General Medicine', description: 'General purpose medicines' },
-      { name: 'Antibiotics', description: 'Antibiotic medications' },
-      { name: 'Pain Relief', description: 'Pain relief medications' },
-      { name: 'Vitamins & Supplements', description: 'Vitamins and dietary supplements' },
-      { name: 'First Aid', description: 'First aid supplies' },
-      { name: 'Personal Care', description: 'Personal care products' },
-    ]);
-    console.log(`✓ Created ${categories.length} categories`);
+    const createdCategories = await Category.bulkCreate(categories);
+    console.log(`✓ Created ${createdCategories.length} categories`);
 
     // Create default product types
     console.log('Creating default product types...');
-    const productTypes = await ProductType.bulkCreate([
-      { name: 'Tablet', description: 'Tablet form medication' },
-      { name: 'Capsule', description: 'Capsule form medication' },
-      { name: 'Syrup', description: 'Liquid syrup medication' },
-      { name: 'Injection', description: 'Injectable medication' },
-      { name: 'Cream/Ointment', description: 'Topical cream or ointment' },
-      { name: 'Drops', description: 'Eye/Ear/Nose drops' },
-    ]);
-    console.log(`✓ Created ${productTypes.length} product types`);
+    const createdProductTypes = await ProductType.bulkCreate(productTypes);
+    console.log(`✓ Created ${createdProductTypes.length} product types`);
 
     // Create sample supplier
     console.log('Creating sample supplier...');
