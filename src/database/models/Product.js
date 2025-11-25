@@ -21,6 +21,12 @@ const Product = sequelize.define(
       allowNull: true,
       unique: true,
     },
+    upc: {
+      // store UPC / EAN / ISBN from CSV
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      comment: 'Original UPC/EAN/ISBN from import CSV',
+    },
     product_type_id: {
       type: DataTypes.INTEGER,
       allowNull: false,

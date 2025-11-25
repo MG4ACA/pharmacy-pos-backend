@@ -1,4 +1,4 @@
-import { testConnection } from './connection.js';
+import { testConnection } from '../config/database.js';
 import { Category, ProductType, sequelize, User } from './models/index.js';
 import { categories } from './seeders/categories.js';
 import { productTypes } from './seeders/productTypes.js';
