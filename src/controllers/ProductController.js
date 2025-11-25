@@ -37,6 +37,7 @@ class ProductController {
         where[Op.or] = [
           { name: { [Op.like]: `%${search}%` } },
           { barcode: { [Op.like]: `%${search}%` } },
+          { upc: { [Op.like]: `%${search}%` } },
           { description: { [Op.like]: `%${search}%` } },
         ];
       }
@@ -339,6 +340,7 @@ class ProductController {
           [Op.or]: [
             { name: { [Op.like]: `%${query}%` } },
             { barcode: { [Op.like]: `%${query}%` } },
+            { upc: { [Op.like]: `%${query}%` } },
           ],
         },
         include: [
