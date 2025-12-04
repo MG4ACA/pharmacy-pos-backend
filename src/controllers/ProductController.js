@@ -14,6 +14,8 @@ class ProductController {
         category_id = null,
         product_type_id = null,
         status = 'active',
+        sortField = 'created_at',
+        sortOrder = 'DESC',
       } = params;
 
       const offset = (page - 1) * limit;
@@ -42,6 +44,35 @@ class ProductController {
         ];
       }
 
+      // Field mapping for sorting
+      const fieldMapping = {
+        name: 'name',
+        reorder_level: 'reorder_level',
+        'productType.name': 'productType.name',
+        'category.name': 'category.name',
+        status: 'status',
+        created_at: 'created_at',
+      };
+
+      // Build order clause
+      let order = [['created_at', 'DESC']];
+      if (sortField && fieldMapping[sortField]) {
+        const orderDirection = sortOrder === '1' ? 'ASC' : 'DESC';
+        if (sortField.includes('.')) {
+          // Handle associated field sorting
+          const [association, field] = sortField.split('.');
+          order = [
+            [
+              { model: association === 'productType' ? ProductType : Category, as: association },
+              field,
+              orderDirection,
+            ],
+          ];
+        } else {
+          order = [[sortField, orderDirection]];
+        }
+      }
+
       // Get products with associations
       const { count, rows } = await Product.findAndCountAll({
         where,
@@ -66,7 +97,7 @@ class ProductController {
         ],
         limit: parseInt(limit),
         offset: parseInt(offset),
-        order: [['created_at', 'DESC']],
+        order,
       });
 
       // Calculate total stock for each product

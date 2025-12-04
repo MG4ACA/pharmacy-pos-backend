@@ -176,6 +176,35 @@ class StockReceiptController {
         ];
       }
 
+      // Handle sorting
+      let order = [
+        ['receipt_date', 'DESC'],
+        ['created_at', 'DESC'],
+      ];
+      if (filters.sortField) {
+        const sortOrder = filters.sortOrder === 1 ? 'ASC' : 'DESC';
+        // Map frontend field names to database column names
+        const fieldMapping = {
+          receipt_number: 'receipt_number',
+          receipt_date: 'receipt_date',
+          'supplier.name': 'supplier.name',
+          total_items: 'total_items',
+          total_amount: 'total_amount',
+          status: 'status',
+        };
+
+        const dbField = fieldMapping[filters.sortField];
+        if (dbField) {
+          if (dbField.includes('.')) {
+            // Handle associated field sorting
+            const [association, field] = dbField.split('.');
+            order = [[{ model: Supplier, as: association }, field, sortOrder]];
+          } else {
+            order = [[dbField, sortOrder]];
+          }
+        }
+      }
+
       const receipts = await StockReceipt.findAll({
         where,
         include: [
@@ -190,10 +219,7 @@ class StockReceiptController {
             attributes: ['id', 'full_name'],
           },
         ],
-        order: [
-          ['receipt_date', 'DESC'],
-          ['created_at', 'DESC'],
-        ],
+        order,
       });
 
       // Convert Sequelize instances to plain objects to avoid cloning issues

@@ -9,7 +9,7 @@ class SupplierController {
    */
   async getAllSuppliers(params = {}) {
     try {
-      const { status, search } = params;
+      const { status, search, sortField, sortOrder } = params;
 
       const whereClause = {};
 
@@ -28,9 +28,30 @@ class SupplierController {
         ];
       }
 
+      // Handle sorting
+      let order = [['created_at', 'DESC']];
+      if (sortField) {
+        const sortOrderValue = sortOrder === 1 ? 'ASC' : 'DESC';
+        // Map frontend field names to database column names
+        const fieldMapping = {
+          id: 'id',
+          name: 'name',
+          contact_person: 'contact_person',
+          email: 'email',
+          phone: 'phone',
+          address: 'address',
+          status: 'status',
+        };
+
+        const dbField = fieldMapping[sortField];
+        if (dbField) {
+          order = [[dbField, sortOrderValue]];
+        }
+      }
+
       const suppliers = await Supplier.findAll({
         where: whereClause,
-        order: [['created_at', 'DESC']],
+        order,
         raw: true,
       });
 

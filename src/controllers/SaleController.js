@@ -245,105 +245,6 @@ class SaleController {
   }
 
   /**
-   * Get sales history with filters and pagination
-   * @param {Object} params - Query parameters
-   * @returns {Object} Result with success status and sales data
-   */
-  async getSalesHistory(params = {}) {
-    try {
-      const {
-        page = 1,
-        limit = 10,
-        start_date,
-        end_date,
-        payment_method,
-        payment_status,
-        user_id,
-      } = params;
-
-      const offset = (page - 1) * limit;
-
-      const whereClause = {};
-
-      // Filter by date range
-      if (start_date || end_date) {
-        whereClause.sale_date = {};
-        if (start_date) {
-          whereClause.sale_date[Op.gte] = new Date(start_date);
-        }
-        if (end_date) {
-          // Add one day to include the end date
-          const endDateObj = new Date(end_date);
-          endDateObj.setDate(endDateObj.getDate() + 1);
-          whereClause.sale_date[Op.lt] = endDateObj;
-        }
-      }
-
-      // Filter by payment method
-      if (payment_method) {
-        whereClause.payment_method = payment_method;
-      }
-
-      // Filter by payment status
-      if (payment_status) {
-        whereClause.payment_status = payment_status;
-      }
-
-      // Filter by user
-      if (user_id) {
-        whereClause.user_id = user_id;
-      }
-
-      const { count, rows: sales } = await Sale.findAndCountAll({
-        where: whereClause,
-        include: [
-          {
-            model: User,
-            as: 'user',
-            attributes: ['id', 'username', 'full_name'],
-          },
-          {
-            model: SaleItem,
-            as: 'saleItems',
-            include: [
-              {
-                model: Product,
-                as: 'product',
-                attributes: ['id', 'name'],
-              },
-            ],
-          },
-        ],
-        order: [['sale_date', 'DESC']],
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-      });
-
-      // Convert Sequelize instances to plain JSON
-      const plainSales = sales.map((sale) => sale.toJSON());
-
-      return {
-        success: true,
-        data: plainSales,
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total: count,
-          totalPages: Math.ceil(count / limit),
-        },
-      };
-    } catch (error) {
-      console.error('SaleController.getSalesHistory error:', error);
-      return {
-        success: false,
-        message: error.message || 'Failed to fetch sales history',
-        data: [],
-        pagination: { page: 1, limit: 10, total: 0, totalPages: 0 },
-      };
-    }
-  }
-
-  /**
    * Get today's sales summary
    * @returns {Object} Result with success status and today's sales data
    */
@@ -674,6 +575,133 @@ class SaleController {
           monthSales: 0,
           totalSalesCount: 0,
         },
+      };
+    }
+  }
+
+  /**
+   * Get sales history with pagination and filters
+   * @param {Object} params - Query parameters
+   * @returns {Object} Result with success status and sales data
+   */
+  async getSalesHistory(params = {}) {
+    try {
+      const {
+        page = 1,
+        limit = 10,
+        start_date,
+        end_date,
+        payment_method,
+        payment_status,
+        user_id,
+        sortField,
+        sortOrder,
+      } = params;
+
+      const offset = (page - 1) * limit;
+
+      const whereClause = {};
+
+      // Filter by date range
+      if (start_date || end_date) {
+        whereClause.sale_date = {};
+        if (start_date) {
+          whereClause.sale_date[Op.gte] = new Date(start_date);
+        }
+        if (end_date) {
+          // Add one day to include the end date
+          const endDateObj = new Date(end_date);
+          endDateObj.setDate(endDateObj.getDate() + 1);
+          whereClause.sale_date[Op.lt] = endDateObj;
+        }
+      }
+
+      // Filter by payment method
+      if (payment_method) {
+        whereClause.payment_method = payment_method;
+      }
+
+      // Filter by payment status
+      if (payment_status) {
+        whereClause.payment_status = payment_status;
+      }
+
+      // Filter by user
+      if (user_id) {
+        whereClause.user_id = user_id;
+      }
+
+      // Handle sorting
+      let order = [['sale_date', 'DESC']];
+      if (sortField) {
+        const sortOrderValue = sortOrder === 1 ? 'ASC' : 'DESC';
+        // Map frontend field names to database column names
+        const fieldMapping = {
+          id: 'id',
+          sale_date: 'sale_date',
+          subtotal: 'subtotal',
+          discount: 'discount',
+          total_amount: 'total_amount',
+          payment_method: 'payment_method',
+          payment_status: 'payment_status',
+        };
+
+        const dbField = fieldMapping[sortField];
+        if (dbField) {
+          order = [[dbField, sortOrderValue]];
+        }
+      }
+
+      const { count, rows: sales } = await Sale.findAndCountAll({
+        where: whereClause,
+        include: [
+          {
+            model: User,
+            as: 'user',
+            attributes: ['id', 'username', 'full_name'],
+          },
+          {
+            model: SaleItem,
+            as: 'saleItems',
+            include: [
+              {
+                model: Product,
+                as: 'product',
+                attributes: ['id', 'name'],
+              },
+              {
+                model: StockEntry,
+                as: 'stockEntry',
+                attributes: ['id', 'batch_number'],
+              },
+            ],
+          },
+        ],
+        order,
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+      });
+
+      // Convert Sequelize instances to plain JSON
+      const plainSales = sales.map((sale) => sale.toJSON());
+
+      return {
+        success: true,
+        data: plainSales,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: count,
+          totalPages: Math.ceil(count / limit),
+        },
+      };
+    } catch (error) {
+      console.error('SaleController.getSalesHistory error:', error);
+      return {
+        success: false,
+        message: error.message || 'Failed to fetch sales history',
+        data: [],
+        pagination: { page: 1, limit: 10, total: 0, totalPages: 0 },
       };
     }
   }

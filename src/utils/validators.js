@@ -105,6 +105,11 @@ export const paginationValidation = [
     .optional()
     .isInt({ min: 1, max: 100 })
     .withMessage('Limit must be between 1 and 100'),
+  query('sortField').optional().isString().withMessage('Sort field must be a string'),
+  query('sortOrder')
+    .optional()
+    .isIn(['ASC', 'DESC', '1', '-1'])
+    .withMessage('Sort order must be ASC, DESC, 1, or -1'),
 ];
 
 export default {
