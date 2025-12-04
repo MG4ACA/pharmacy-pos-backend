@@ -7,8 +7,6 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "db:sync": "node src/database/sync.js",
-    "db:seed": "node src/database/seedDatabase.js",
     "db:seed:products": "node src/database/seedProductsFromCsv.js",
     "db:create": "node src/database/createDatabase.js"
   },

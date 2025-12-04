@@ -3,14 +3,14 @@ import { Category, ProductType, sequelize, User } from './models/index.js';
 import { categories } from './seeders/categories.js';
 import { productTypes } from './seeders/productTypes.js';
 
-const syncDatabase = async () => {
+export const syncDatabase = async () => {
   try {
     console.log('Starting database synchronization...\n');
 
     // Test connection first
     const connectionResult = await testConnection();
-    if (!connectionResult.success) {
-      throw new Error(`Database connection failed: ${connectionResult.message}`);
+    if (!connectionResult) {
+      throw new Error('Database connection failed');
     }
 
     // Sync all models (create tables if they don't exist)
@@ -87,5 +87,3 @@ const syncDatabase = async () => {
     process.exit(1);
   }
 };
-
-syncDatabase();

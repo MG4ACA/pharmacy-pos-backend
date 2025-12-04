@@ -1,13 +1,14 @@
 import dotenv from 'dotenv';
 import mysql from 'mysql2/promise';
+import { syncDatabase } from './sync.js';
 
 dotenv.config();
 
 /**
- * Create Database Script
- * Run this once to create the database if it doesn't exist
+ * Create Database and Tables Script
+ * Creates the database if it doesn't exist, then runs sync to create tables and seed data
  */
-async function createDatabase() {
+async function createDatabaseAndTables() {
   let connection;
 
   try {
@@ -28,6 +29,10 @@ async function createDatabase() {
     console.log(`✓ Database '${dbName}' created successfully (or already exists)`);
 
     await connection.end();
+
+    // Now sync tables and seed data
+    await syncDatabase();
+
     process.exit(0);
   } catch (error) {
     console.error('❌ Error creating database:', error.message);
@@ -38,4 +43,4 @@ async function createDatabase() {
   }
 }
 
-createDatabase();
+createDatabaseAndTables();
