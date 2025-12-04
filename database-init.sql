@@ -218,31 +218,6 @@ CREATE TABLE sale_items (
 -- ============================================================
 -- SEED DATA: Categories
 -- ============================================================
-INSERT INTO categories (name, description, status) VALUES
-('Medicine', 'Pharmaceutical medications', 'active'),
-('Beverage', 'Drinks and beverages', 'active'),
-('Snack', 'Snack items', 'active'),
-('Biscuit', 'Biscuits and cookies', 'active'),
-('Personal Care', 'Personal care products', 'active'),
-('Baby Care', 'Baby care products', 'active'),
-('Other', 'Other items', 'active');
-
--- ============================================================
--- SEED DATA: Product Types
--- ============================================================
-INSERT INTO product_types (name, description, status) VALUES
-('Tablet', 'Oral solid dosage form', 'active'),
-('Capsule', 'Oral solid dosage form in capsule', 'active'),
-('Syrup', 'Liquid oral medication', 'active'),
-('Injection', 'Injectable medication', 'active'),
-('Cream/Ointment', 'Topical medication', 'active'),
-('Drops', 'Liquid drops (eye, ear, nasal)', 'active'),
-('Inhaler', 'Respiratory medication', 'active'),
-('Bottle', 'Bottled beverages and liquids', 'active'),
-('Packet', 'Packaged items', 'active'),
-('Tub', 'Container/tub items', 'active'),
-('Box', 'Boxed items', 'active'),
-('Unit', 'General unit items', 'active');
 
 INSERT INTO users (username, password, full_name, email, phone, status) VALUES
 ('admin', '$2b$10$4XqglvPuLTkfSvPhPl.XIeBjEWUMaBOsCDtYn6v.JeXIoatCUILF6', 'Administrator', 'admin@pharmacy.com', '+94771234567', 'active');
@@ -251,13 +226,6 @@ INSERT INTO users (username, password, full_name, email, phone, status) VALUES
 -- To generate a new bcrypt hash for a different password, use:
 -- bcrypt.hashSync('your_password', 10);
 
--- ============================================================
--- SEED DATA: Sample Suppliers
--- ============================================================
-INSERT INTO suppliers (name, contact_person, email, phone, address, status) VALUES
-('ABC Pharmaceuticals', 'John Silva', 'john@abcpharma.lk', '+94112345678', '123 Main Street, Colombo 03', 'active'),
-('MediSupply Lanka', 'Saman Perera', 'saman@medisupply.lk', '+94112345679', '456 Galle Road, Colombo 04', 'active'),
-('HealthCare Distributors', 'Nimal Fernando', 'nimal@healthcare.lk', '+94112345680', '789 Kandy Road, Kaduwela', 'active');
 
 -- ============================================================
 -- VERIFICATION QUERIES
