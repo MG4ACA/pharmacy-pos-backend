@@ -16,7 +16,7 @@ async function run() {
     // Create tables if they don't exist. For a dropped database you should run sync first.
     await sequelize.sync();
 
-    const csvPath = path.resolve(__dirname, '../../items_export_enriched_camcase.csv');
+    const csvPath = path.resolve(__dirname, './items_export_enriched_camcase.csv');
     const result = await seedProductsFromCsv(csvPath);
 
     console.log('Products seeding finished. Summary:');
