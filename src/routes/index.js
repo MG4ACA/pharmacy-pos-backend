@@ -6,6 +6,7 @@ import backupRoutes from './backup.js';
 import dashboardRoutes from './dashboard.routes.js';
 import exportRoutes from './export.js';
 import metaRoutes from './meta.routes.js';
+import notificationRoutes from './notification.routes.js';
 import productRoutes from './product.routes.js';
 import reportRoutes from './report.routes.js';
 import saleRoutes from './sale.routes.js';
@@ -46,6 +47,7 @@ router.get('/', (req, res) => {
       meta: '/api/meta',
       backup: '/api/backup',
       export: '/api/export',
+      notifications: '/api/notifications',
     },
   });
 });
@@ -56,6 +58,7 @@ router.get('/', (req, res) => {
 router.use('/auth', authRoutes);
 router.use('/backup', backupRoutes);
 router.use('/export', exportRoutes);
+router.use('/notifications', notificationRoutes);
 router.use('/products', productRoutes);
 router.use('/stock', stockRoutes);
 router.use('/stock-receipts', stockReceiptRoutes);

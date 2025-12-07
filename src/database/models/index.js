@@ -1,5 +1,7 @@
 import sequelize from '../../config/database.js';
 import Category from './Category.js';
+import Notification from './Notification.js';
+import NotificationPreference from './NotificationPreference.js';
 import Product from './Product.js';
 import ProductType from './ProductType.js';
 import Sale from './Sale.js';
@@ -115,8 +117,30 @@ StockEntry.hasMany(SaleItem, {
   as: 'saleItems',
 });
 
+// Notification associations
+Notification.belongsTo(User, {
+  foreignKey: 'user_id',
+  as: 'user',
+});
+User.hasMany(Notification, {
+  foreignKey: 'user_id',
+  as: 'notifications',
+});
+
+// NotificationPreference associations
+NotificationPreference.belongsTo(User, {
+  foreignKey: 'user_id',
+  as: 'user',
+});
+User.hasOne(NotificationPreference, {
+  foreignKey: 'user_id',
+  as: 'notificationPreference',
+});
+
 export {
   Category,
+  Notification,
+  NotificationPreference,
   Product,
   ProductType,
   Sale,
