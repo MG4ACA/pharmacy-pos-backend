@@ -2,7 +2,9 @@ import express from 'express';
 
 // Import route modules
 import authRoutes from './auth.routes.js';
+import backupRoutes from './backup.js';
 import dashboardRoutes from './dashboard.routes.js';
+import exportRoutes from './export.js';
 import metaRoutes from './meta.routes.js';
 import productRoutes from './product.routes.js';
 import reportRoutes from './report.routes.js';
@@ -42,6 +44,8 @@ router.get('/', (req, res) => {
       dashboard: '/api/dashboard',
       reports: '/api/reports',
       meta: '/api/meta',
+      backup: '/api/backup',
+      export: '/api/export',
     },
   });
 });
@@ -50,6 +54,8 @@ router.get('/', (req, res) => {
  * Mount routes
  */
 router.use('/auth', authRoutes);
+router.use('/backup', backupRoutes);
+router.use('/export', exportRoutes);
 router.use('/products', productRoutes);
 router.use('/stock', stockRoutes);
 router.use('/stock-receipts', stockReceiptRoutes);

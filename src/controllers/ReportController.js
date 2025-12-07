@@ -1,5 +1,12 @@
 import { Op } from 'sequelize';
-import { Product, Sale, SaleItem, StockEntry, Supplier } from '../database/models/index.js';
+import {
+  Category,
+  Product,
+  Sale,
+  SaleItem,
+  StockEntry,
+  Supplier,
+} from '../database/models/index.js';
 
 class ReportController {
   /**
@@ -36,12 +43,24 @@ class ReportController {
         include: [
           {
             model: SaleItem,
-            as: 'items',
+            as: 'saleItems',
             include: [
               {
                 model: Product,
                 as: 'product',
-                attributes: ['id', 'name', 'category'],
+                attributes: ['id', 'name'],
+                include: [
+                  {
+                    model: Category,
+                    as: 'category',
+                    attributes: ['name'],
+                  },
+                ],
+              },
+              {
+                model: StockEntry,
+                as: 'stockEntry',
+                attributes: ['cost_price'],
               },
             ],
           },
@@ -54,6 +73,20 @@ class ReportController {
       const totalRevenue = sales.reduce((sum, sale) => sum + parseFloat(sale.total_amount), 0);
       const totalDiscount = sales.reduce((sum, sale) => sum + parseFloat(sale.discount), 0);
       const totalTax = sales.reduce((sum, sale) => sum + parseFloat(sale.tax), 0);
+
+      // Calculate total cost and profit
+      let totalCost = 0;
+      sales.forEach((sale) => {
+        sale.saleItems.forEach((item) => {
+          const costPrice = parseFloat(item.stockEntry?.cost_price || 0);
+          const quantity = parseInt(item.quantity);
+          totalCost += costPrice * quantity;
+        });
+      });
+
+      const grossProfit = totalRevenue - totalCost;
+      const netProfit = totalRevenue - totalDiscount - totalCost;
+      const profitMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
 
       // Payment method breakdown
       const paymentBreakdown = {
@@ -69,8 +102,8 @@ class ReportController {
       // Category-wise sales
       const categoryTotals = {};
       sales.forEach((sale) => {
-        sale.items.forEach((item) => {
-          const category = item.product?.category || 'Uncategorized';
+        sale.saleItems.forEach((item) => {
+          const category = item.product?.category?.name || 'Uncategorized';
           if (!categoryTotals[category]) {
             categoryTotals[category] = 0;
           }
@@ -92,7 +125,11 @@ class ReportController {
             totalRevenue,
             totalDiscount,
             totalTax,
+            totalCost,
             netRevenue: totalRevenue - totalDiscount,
+            grossProfit,
+            netProfit,
+            profitMargin,
           },
           paymentBreakdown,
           categoryTotals,
@@ -114,37 +151,89 @@ class ReportController {
    */
   async getStockLevelReport() {
     try {
+      // Get all products with their stock entries
       const products = await Product.findAll({
+        include: [
+          {
+            model: StockEntry,
+            as: 'stockEntries',
+            attributes: ['quantity_remaining', 'cost_price', 'expiry_date', 'batch_number'],
+            where: {
+              quantity_remaining: {
+                [Op.gt]: 0,
+              },
+            },
+            required: false, // Include products even if they have no stock
+          },
+          {
+            model: Category,
+            as: 'category',
+            attributes: ['name'],
+          },
+        ],
         order: [['name', 'ASC']],
       });
 
-      const plainProducts = products.map((product) => product.toJSON());
+      // Calculate stock levels for each product
+      const productsWithStock = products.map((product) => {
+        const plainProduct = product.toJSON();
 
-      // Categorize products
-      const lowStock = plainProducts.filter((p) => p.total_stock <= p.reorder_level);
-      const outOfStock = plainProducts.filter((p) => p.total_stock === 0);
-      const inStock = plainProducts.filter(
-        (p) => p.total_stock > p.reorder_level && p.total_stock > 0
+        // Calculate total stock from all batches
+        const totalStock =
+          plainProduct.stockEntries?.reduce(
+            (sum, entry) => sum + parseInt(entry.quantity_remaining || 0),
+            0
+          ) || 0;
+
+        // Calculate total inventory value from all batches
+        const inventoryValue =
+          plainProduct.stockEntries?.reduce(
+            (sum, entry) =>
+              sum + parseFloat(entry.cost_price || 0) * parseInt(entry.quantity_remaining || 0),
+            0
+          ) || 0;
+
+        // Find earliest expiry date
+        const earliestExpiry = plainProduct.stockEntries?.reduce((earliest, entry) => {
+          if (!entry.expiry_date) return earliest;
+          const expiryDate = new Date(entry.expiry_date);
+          return !earliest || expiryDate < earliest ? expiryDate : earliest;
+        }, null);
+
+        return {
+          ...plainProduct,
+          totalStock,
+          inventoryValue,
+          earliestExpiry,
+          batchCount: plainProduct.stockEntries?.length || 0,
+        };
+      });
+
+      // Categorize products based on reorder level
+      const lowStock = productsWithStock.filter(
+        (p) => p.totalStock > 0 && p.totalStock <= (p.reorder_level || 0)
       );
+      const outOfStock = productsWithStock.filter((p) => p.totalStock === 0);
+      const inStock = productsWithStock.filter((p) => p.totalStock > (p.reorder_level || 0));
 
       // Calculate total inventory value
-      let totalValue = 0;
-      plainProducts.forEach((product) => {
-        totalValue += parseFloat(product.total_stock * (product.purchase_price || 0));
-      });
+      const totalValue = productsWithStock.reduce(
+        (sum, product) => sum + parseFloat(product.inventoryValue || 0),
+        0
+      );
 
       return {
         success: true,
         data: {
           summary: {
-            totalProducts: plainProducts.length,
+            totalProducts: productsWithStock.length,
             inStock: inStock.length,
             lowStock: lowStock.length,
             outOfStock: outOfStock.length,
             totalInventoryValue: totalValue,
           },
           products: {
-            all: plainProducts,
+            all: productsWithStock,
             lowStock,
             outOfStock,
             inStock,
@@ -187,7 +276,7 @@ class ReportController {
           {
             model: Product,
             as: 'product',
-            attributes: ['id', 'name', 'generic_name', 'category', 'type'],
+            attributes: ['id', 'name', 'description', 'barcode'],
           },
           {
             model: Supplier,
@@ -217,7 +306,7 @@ class ReportController {
 
       // Calculate total value at risk
       const totalValueAtRisk = plainExpiringStock.reduce((sum, stock) => {
-        return sum + parseFloat(stock.quantity_remaining * stock.purchase_price);
+        return sum + parseFloat(stock.quantity_remaining * stock.cost_price);
       }, 0);
 
       return {
@@ -253,7 +342,7 @@ class ReportController {
    */
   async getTopSellingProducts(params = {}) {
     try {
-      const { start_date, end_date, limit = 10 } = params;
+      const { start_date, end_date, limit = 10, sort_by = 'revenue' } = params;
 
       const whereClause = {};
 
@@ -283,22 +372,68 @@ class ReportController {
           {
             model: Product,
             as: 'product',
-            attributes: ['id', 'name', 'generic_name', 'category'],
+            attributes: ['id', 'name', 'description', 'barcode'],
+            include: [
+              {
+                model: Category,
+                as: 'category',
+                attributes: ['name'],
+              },
+            ],
+          },
+          {
+            model: StockEntry,
+            as: 'stockEntry',
+            attributes: ['cost_price'],
           },
         ],
-        attributes: [
-          'product_id',
-          [SaleItem.sequelize.fn('SUM', SaleItem.sequelize.col('quantity')), 'total_quantity'],
-          [SaleItem.sequelize.fn('SUM', SaleItem.sequelize.col('subtotal')), 'total_revenue'],
-          [SaleItem.sequelize.fn('COUNT', SaleItem.sequelize.col('SaleItem.id')), 'sale_count'],
-        ],
-        group: ['product_id', 'product.id'],
-        order: [[SaleItem.sequelize.literal('total_revenue'), 'DESC']],
-        limit: parseInt(limit),
         raw: false,
       });
 
-      const plainSaleItems = saleItems.map((item) => item.toJSON());
+      // Group by product and calculate metrics
+      const productMap = new Map();
+
+      saleItems.forEach((item) => {
+        const productId = item.product_id;
+        const quantity = parseInt(item.quantity);
+        const subtotal = parseFloat(item.subtotal);
+        const costPrice = parseFloat(item.stockEntry?.cost_price || 0);
+        const itemCost = costPrice * quantity;
+
+        if (!productMap.has(productId)) {
+          productMap.set(productId, {
+            product_id: productId,
+            product: item.product,
+            total_revenue: 0,
+            total_cost: 0,
+            total_quantity: 0,
+            sale_count: 0,
+          });
+        }
+
+        const productData = productMap.get(productId);
+        productData.total_revenue += subtotal;
+        productData.total_cost += itemCost;
+        productData.total_quantity += quantity;
+        productData.sale_count += 1;
+      });
+
+      // Convert to array and add profit calculations
+      let plainSaleItems = Array.from(productMap.values()).map((item) => ({
+        ...item,
+        total_profit: item.total_revenue - item.total_cost,
+        profit_margin:
+          item.total_revenue > 0
+            ? ((item.total_revenue - item.total_cost) / item.total_revenue) * 100
+            : 0,
+      }));
+
+      // Sort based on sort_by parameter
+      const sortField = sort_by === 'profit' ? 'total_profit' : 'total_revenue';
+      plainSaleItems.sort((a, b) => b[sortField] - a[sortField]);
+
+      // Limit results
+      plainSaleItems = plainSaleItems.slice(0, parseInt(limit));
 
       return {
         success: true,
@@ -306,6 +441,7 @@ class ReportController {
       };
     } catch (error) {
       console.error('ReportController.getTopSellingProducts error:', error);
+      console.error('Error stack:', error.stack);
       return {
         success: false,
         message: error.message || 'Failed to fetch top selling products',

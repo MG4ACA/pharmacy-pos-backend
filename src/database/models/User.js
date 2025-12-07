@@ -44,10 +44,19 @@ const User = sequelize.define(
       type: DataTypes.STRING(20),
       allowNull: true,
     },
+    role: {
+      type: DataTypes.ENUM('admin', 'user'),
+      defaultValue: 'user',
+      allowNull: false,
+    },
     status: {
       type: DataTypes.ENUM('active', 'inactive'),
       defaultValue: 'active',
       allowNull: false,
+    },
+    last_login: {
+      type: DataTypes.DATE,
+      allowNull: true,
     },
     created_at: {
       type: DataTypes.DATE,
