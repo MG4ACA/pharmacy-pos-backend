@@ -82,9 +82,18 @@ class StockReceiptController {
           throw new Error('Quantity must be greater than 0');
         }
 
-        if (entry.costPrice <= 0) {
-          throw new Error('Cost price must be greater than 0');
+        if (entry.costPrice < 0) {
+          throw new Error('Cost price cannot be negative');
         }
+
+        // Validate free quantity
+        const freeQuantity = entry.freeQuantity || 0;
+        if (freeQuantity < 0) {
+          throw new Error('Free quantity cannot be negative');
+        }
+
+        // Calculate total quantity (purchased + free)
+        const totalQuantity = entry.quantity + freeQuantity;
 
         // Create stock entry
         await StockEntry.create(
@@ -94,7 +103,8 @@ class StockReceiptController {
             receipt_id: receipt.id,
             batch_number: entry.batchNumber,
             quantity_received: entry.quantity,
-            quantity_remaining: entry.quantity,
+            free_quantity: freeQuantity,
+            quantity_remaining: totalQuantity,
             cost_price: entry.costPrice,
             selling_price: entry.sellingPrice,
             expiry_date: entry.expiryDate || null,
@@ -105,6 +115,7 @@ class StockReceiptController {
         );
 
         totalItems += 1;
+        // Only calculate cost for purchased items, not free items
         totalAmount += parseFloat(entry.costPrice) * parseInt(entry.quantity);
       }
 
@@ -321,6 +332,15 @@ class StockReceiptController {
 
       // Create new entries
       for (const entry of entries) {
+        // Validate free quantity
+        const freeQuantity = entry.freeQuantity || 0;
+        if (freeQuantity < 0) {
+          throw new Error('Free quantity cannot be negative');
+        }
+
+        // Calculate total quantity (purchased + free)
+        const totalQuantity = entry.quantity + freeQuantity;
+
         await StockEntry.create(
           {
             product_id: entry.productId,
@@ -328,7 +348,8 @@ class StockReceiptController {
             receipt_id: receipt.id,
             batch_number: entry.batchNumber,
             quantity_received: entry.quantity,
-            quantity_remaining: entry.quantity,
+            free_quantity: freeQuantity,
+            quantity_remaining: totalQuantity,
             cost_price: entry.costPrice,
             selling_price: entry.sellingPrice,
             expiry_date: entry.expiryDate || null,
@@ -339,6 +360,7 @@ class StockReceiptController {
         );
 
         totalItems += 1;
+        // Only calculate cost for purchased items, not free items
         totalAmount += parseFloat(entry.costPrice) * parseInt(entry.quantity);
       }
 
@@ -392,7 +414,9 @@ class StockReceiptController {
       });
 
       for (const entry of entries) {
-        if (entry.quantity_remaining < entry.quantity_received) {
+        // Total quantity includes purchased + free items
+        const totalReceived = entry.quantity_received + (entry.free_quantity || 0);
+        if (entry.quantity_remaining < totalReceived) {
           throw new Error(
             `Cannot cancel: Stock from this receipt has been sold (Batch: ${entry.batch_number})`
           );

@@ -138,15 +138,6 @@ class SaleController {
 
       // Create sale items and deduct stock
       for (const saleItem of saleItems) {
-        // Create sale item
-        await SaleItem.create(
-          {
-            sale_id: sale.id,
-            ...saleItem,
-          },
-          { transaction }
-        );
-
         // Deduct stock using FIFO logic
         const deductResult = await StockController.deductStock(
           saleItem.product_id,
@@ -158,6 +149,23 @@ class SaleController {
           await transaction.rollback();
           return deductResult;
         }
+
+        // Calculate total free items deducted across all batches
+        const totalFreeDeducted = deductResult.data.deductions.reduce(
+          (sum, d) => sum + (d.free_quantity_deducted || 0),
+          0
+        );
+
+        // Create sale item with free item tracking
+        await SaleItem.create(
+          {
+            sale_id: sale.id,
+            ...saleItem,
+            is_free_item: totalFreeDeducted > 0,
+            free_item_quantity: totalFreeDeducted,
+          },
+          { transaction }
+        );
       }
 
       // Commit transaction
@@ -683,7 +691,50 @@ class SaleController {
       });
 
       // Convert Sequelize instances to plain JSON
-      const plainSales = sales.map((sale) => sale.toJSON());
+      const plainSales = sales.map((sale) => {
+        const saleData = sale.toJSON();
+
+        // Calculate profit metrics for each sale
+        let totalCost = 0;
+        let totalCostExcludingFree = 0;
+        let totalFreeItemsRevenue = 0;
+
+        if (saleData.saleItems && saleData.saleItems.length > 0) {
+          saleData.saleItems.forEach((item) => {
+            const costPrice = parseFloat(item.stockEntry?.cost_price || 0);
+            const sellingPrice = parseFloat(item.unit_price);
+            const quantity = parseInt(item.quantity);
+            const freeQuantity = parseInt(item.free_item_quantity || 0);
+            const purchasedQuantity = quantity - freeQuantity;
+
+            // Total cost (purchased items only, free items have zero cost)
+            totalCost += costPrice * purchasedQuantity;
+            totalCostExcludingFree += costPrice * purchasedQuantity;
+
+            // Revenue from free items
+            if (freeQuantity > 0) {
+              totalFreeItemsRevenue += sellingPrice * freeQuantity;
+            }
+          });
+        }
+
+        // Calculate profit metrics
+        const revenue = parseFloat(saleData.total_amount);
+        const grossProfit = revenue - totalCost; // Includes free items revenue
+        const netProfit = revenue - totalFreeItemsRevenue - totalCostExcludingFree; // Excludes free items
+
+        return {
+          ...saleData,
+          profitMetrics: {
+            totalCost,
+            grossProfit,
+            netProfit,
+            freeItemsRevenue: totalFreeItemsRevenue,
+            grossProfitMargin: revenue > 0 ? ((grossProfit / revenue) * 100).toFixed(2) : 0,
+            netProfitMargin: revenue > 0 ? ((netProfit / revenue) * 100).toFixed(2) : 0,
+          },
+        };
+      });
 
       return {
         success: true,
@@ -702,6 +753,136 @@ class SaleController {
         message: error.message || 'Failed to fetch sales history',
         data: [],
         pagination: { page: 1, limit: 10, total: 0, totalPages: 0 },
+      };
+    }
+  }
+
+  /**
+   * Get free items sales report
+   * @param {Object} params - Query parameters with date range
+   * @returns {Object} Result with free items analytics
+   */
+  async getFreeItemsSalesReport(params = {}) {
+    try {
+      const { start_date, end_date } = params;
+
+      const whereClause = { payment_status: 'completed' };
+
+      // Filter by date range
+      if (start_date || end_date) {
+        whereClause.sale_date = {};
+        if (start_date) {
+          whereClause.sale_date[Op.gte] = new Date(start_date);
+        }
+        if (end_date) {
+          const endDateObj = new Date(end_date);
+          endDateObj.setDate(endDateObj.getDate() + 1);
+          whereClause.sale_date[Op.lt] = endDateObj;
+        }
+      }
+
+      // Get sales with free items
+      const salesWithFreeItems = await Sale.findAll({
+        where: whereClause,
+        include: [
+          {
+            model: SaleItem,
+            as: 'saleItems',
+            where: {
+              free_item_quantity: {
+                [Op.gt]: 0,
+              },
+            },
+            include: [
+              {
+                model: Product,
+                as: 'product',
+                attributes: ['id', 'name', 'barcode'],
+              },
+              {
+                model: StockEntry,
+                as: 'stockEntry',
+                attributes: ['id', 'batch_number', 'cost_price'],
+              },
+            ],
+          },
+          {
+            model: User,
+            as: 'user',
+            attributes: ['id', 'username', 'full_name'],
+          },
+        ],
+        order: [['sale_date', 'DESC']],
+      });
+
+      // Calculate summary metrics
+      let totalFreeItemsSold = 0;
+      let totalFreeItemsRevenue = 0;
+      const productBreakdown = {};
+
+      salesWithFreeItems.forEach((sale) => {
+        sale.saleItems.forEach((item) => {
+          const freeQty = parseInt(item.free_item_quantity || 0);
+          const unitPrice = parseFloat(item.unit_price);
+          const revenue = freeQty * unitPrice;
+
+          totalFreeItemsSold += freeQty;
+          totalFreeItemsRevenue += revenue;
+
+          // Product-level breakdown
+          const productId = item.product_id;
+          if (!productBreakdown[productId]) {
+            productBreakdown[productId] = {
+              product_id: productId,
+              product_name: item.product?.name || 'Unknown',
+              barcode: item.product?.barcode || '',
+              total_free_quantity: 0,
+              total_revenue: 0,
+              sales_count: 0,
+            };
+          }
+
+          productBreakdown[productId].total_free_quantity += freeQty;
+          productBreakdown[productId].total_revenue += revenue;
+          productBreakdown[productId].sales_count += 1;
+        });
+      });
+
+      const topFreeItemProducts = Object.values(productBreakdown)
+        .sort((a, b) => b.total_free_quantity - a.total_free_quantity)
+        .slice(0, 10);
+
+      return {
+        success: true,
+        data: {
+          sales: salesWithFreeItems.map((s) => s.toJSON()),
+          summary: {
+            totalSalesWithFreeItems: salesWithFreeItems.length,
+            totalFreeItemsSold,
+            totalFreeItemsRevenue,
+            averageRevenuePerSale:
+              salesWithFreeItems.length > 0
+                ? (totalFreeItemsRevenue / salesWithFreeItems.length).toFixed(2)
+                : 0,
+          },
+          topProducts: topFreeItemProducts,
+        },
+      };
+    } catch (error) {
+      console.error('SaleController.getFreeItemsSalesReport error:', error);
+      return {
+        success: false,
+        message: error.message || 'Failed to fetch free items sales report',
+        data: {
+          sales: [],
+          summary: {
+            totalSalesWithFreeItems: 0,
+            totalFreeItemsSold: 0,
+            totalFreeItemsRevenue: 0,
+            averageRevenuePerSale: 0,
+          },
+          topProducts: [],
+        },
       };
     }
   }

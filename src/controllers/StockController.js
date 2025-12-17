@@ -57,7 +57,30 @@ class StockController {
         ],
       });
 
-      const plainEntries = stockEntries.map((entry) => entry.toJSON());
+      // Add computed breakdown for each entry
+      const plainEntries = stockEntries.map((entry) => {
+        const entryData = entry.toJSON();
+
+        // Calculate breakdown of remaining stock
+        const totalReceived = entryData.quantity_received + (entryData.free_quantity || 0);
+        const totalSold = totalReceived - entryData.quantity_remaining;
+
+        // Calculate remaining free and purchased items
+        const freeRemaining = Math.max(0, (entryData.free_quantity || 0) - totalSold);
+        const purchasedRemaining = entryData.quantity_remaining - freeRemaining;
+
+        return {
+          ...entryData,
+          breakdown: {
+            totalReceived,
+            totalSold,
+            purchasedReceived: entryData.quantity_received,
+            freeReceived: entryData.free_quantity || 0,
+            purchasedRemaining,
+            freeRemaining,
+          },
+        };
+      });
 
       return {
         success: true,
@@ -194,6 +217,19 @@ class StockController {
 
         const deductFromThisBatch = Math.min(entry.quantity_remaining, remainingToDeduct);
 
+        // Calculate how many free items vs purchased items are being deducted
+        // First calculate what portion of this batch is free vs purchased
+        const totalReceived = entry.quantity_received + (entry.free_quantity || 0);
+        const totalSold = totalReceived - entry.quantity_remaining;
+
+        // Calculate remaining free and purchased items
+        let freeRemaining = Math.max(0, (entry.free_quantity || 0) - totalSold);
+        let purchasedRemaining = entry.quantity_remaining - freeRemaining;
+
+        // Deduct from purchased items first, then free items
+        const freeDeducted = Math.min(freeRemaining, deductFromThisBatch);
+        const purchasedDeducted = deductFromThisBatch - freeDeducted;
+
         // Update the stock entry
         await entry.update(
           {
@@ -206,6 +242,8 @@ class StockController {
           batch_id: entry.id,
           batch_number: entry.batch_number,
           quantity_deducted: deductFromThisBatch,
+          free_quantity_deducted: freeDeducted,
+          purchased_quantity_deducted: purchasedDeducted,
           cost_price: entry.cost_price,
           selling_price: entry.selling_price,
         });

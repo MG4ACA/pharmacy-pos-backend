@@ -140,6 +140,7 @@ CREATE TABLE stock_receipts (
 -- ============================================================
 -- TABLE: stock_entries
 -- Stock entries (batch-level inventory tracking with FIFO)
+-- Updated: 2025-12-17 - Added free items tracking
 -- ============================================================
 CREATE TABLE stock_entries (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -148,6 +149,7 @@ CREATE TABLE stock_entries (
   receipt_id INT DEFAULT NULL,
   batch_number VARCHAR(50) NOT NULL,
   quantity_received INT NOT NULL,
+  free_quantity INT NOT NULL DEFAULT 0 COMMENT 'Number of free items received from supplier (e.g., buy 12 get 2 free)',
   quantity_remaining INT NOT NULL,
   cost_price DECIMAL(10, 2) NOT NULL,
   selling_price DECIMAL(10, 2) NOT NULL,
@@ -166,7 +168,8 @@ CREATE TABLE stock_entries (
   INDEX idx_expiry_date (expiry_date),
   INDEX idx_entry_date (entry_date),
   INDEX idx_quantity_remaining (quantity_remaining),
-  INDEX idx_product_remaining (product_id, quantity_remaining)
+  INDEX idx_product_remaining (product_id, quantity_remaining),
+  INDEX idx_free_quantity (free_quantity)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
@@ -196,6 +199,7 @@ CREATE TABLE sales (
 -- ============================================================
 -- TABLE: sale_items
 -- Individual items in each sale transaction
+-- Updated: 2025-12-17 - Added free items tracking
 -- ============================================================
 CREATE TABLE sale_items (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -203,6 +207,8 @@ CREATE TABLE sale_items (
   product_id INT NOT NULL,
   stock_entry_id INT NOT NULL,
   quantity INT NOT NULL,
+  is_free_item BOOLEAN NOT NULL DEFAULT FALSE COMMENT 'Indicates whether this item was sold from free stock',
+  free_item_quantity INT NOT NULL DEFAULT 0 COMMENT 'Number of items in this sale that were from free stock',
   unit_price DECIMAL(10, 2) NOT NULL,
   subtotal DECIMAL(10, 2) NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -212,7 +218,8 @@ CREATE TABLE sale_items (
   FOREIGN KEY (stock_entry_id) REFERENCES stock_entries(id) ON DELETE RESTRICT,
   INDEX idx_sale (sale_id),
   INDEX idx_product (product_id),
-  INDEX idx_stock_entry (stock_entry_id)
+  INDEX idx_stock_entry (stock_entry_id),
+  INDEX idx_is_free_item (is_free_item)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
@@ -281,12 +288,21 @@ INSERT INTO users (username, password, full_name, email, phone, status) VALUES
 -- 8. FIFO batch management handled via stock_entries table
 --    - quantity_remaining tracks available stock per batch
 --    - entry_date used for FIFO ordering (oldest first)
+--    - free_quantity tracks promotional free items from suppliers
+--    - quantity_remaining = quantity_received + free_quantity initially
 --
 -- 9. Stock receipt system links deliveries to batches
 --    - receipt_id in stock_entries links to stock_receipts
 --    - Atomic transaction handling in application layer
 --
 -- 10. All monetary values use DECIMAL(10,2) for precision
+--
+-- 11. Free items tracking (Added 2025-12-17):
+--    - stock_entries.free_quantity: Count of free items from supplier
+--    - sale_items.is_free_item: Boolean flag for free stock sales
+--    - sale_items.free_item_quantity: Count of free items in this sale
+--    - Enables dual profit calculation (with/without free items)
+--    - Free items have zero cost but same selling price
 --
 -- ============================================================
 -- END OF DATABASE INITIALIZATION SCRIPT

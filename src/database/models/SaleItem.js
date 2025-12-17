@@ -41,6 +41,21 @@ const SaleItem = sequelize.define(
         min: 1,
       },
     },
+    is_free_item: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      comment: 'Indicates whether this item was sold from free stock',
+    },
+    free_item_quantity: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+      validate: {
+        min: 0,
+      },
+      comment: 'Number of items in this sale that were from free stock',
+    },
     unit_price: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,

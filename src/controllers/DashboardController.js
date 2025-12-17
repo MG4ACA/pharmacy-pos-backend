@@ -1,5 +1,5 @@
 import { Op } from 'sequelize';
-import { Product, Sale, StockEntry } from '../database/models/index.js';
+import { Product, Sale, SaleItem, StockEntry } from '../database/models/index.js';
 
 class DashboardController {
   /**
@@ -93,6 +93,90 @@ class DashboardController {
 
       const plainRecentSales = recentSales.map((sale) => sale.toJSON());
 
+      // Free items metrics - Today
+      const todayFreeItemsReceived =
+        (await StockEntry.sum('free_quantity', {
+          where: {
+            entry_date: {
+              [Op.gte]: today,
+              [Op.lt]: tomorrow,
+            },
+          },
+        })) || 0;
+
+      const todayFreeItemsSold =
+        (await SaleItem.sum('free_item_quantity', {
+          include: [
+            {
+              model: Sale,
+              as: 'sale',
+              where: {
+                sale_date: {
+                  [Op.gte]: today,
+                  [Op.lt]: tomorrow,
+                },
+                payment_status: 'completed',
+              },
+              attributes: [],
+            },
+          ],
+        })) || 0;
+
+      // Free items metrics - This Month
+      const monthFreeItemsReceived =
+        (await StockEntry.sum('free_quantity', {
+          where: {
+            entry_date: {
+              [Op.gte]: firstDayOfMonth,
+            },
+          },
+        })) || 0;
+
+      const monthFreeItemsSold =
+        (await SaleItem.sum('free_item_quantity', {
+          include: [
+            {
+              model: Sale,
+              as: 'sale',
+              where: {
+                sale_date: {
+                  [Op.gte]: firstDayOfMonth,
+                },
+                payment_status: 'completed',
+              },
+              attributes: [],
+            },
+          ],
+        })) || 0;
+
+      // Calculate revenue from free items (month)
+      const freeItemsSales = await SaleItem.findAll({
+        where: {
+          free_item_quantity: {
+            [Op.gt]: 0,
+          },
+        },
+        include: [
+          {
+            model: Sale,
+            as: 'sale',
+            where: {
+              sale_date: {
+                [Op.gte]: firstDayOfMonth,
+              },
+              payment_status: 'completed',
+            },
+            attributes: [],
+          },
+        ],
+        attributes: ['free_item_quantity', 'unit_price'],
+      });
+
+      const monthFreeItemsRevenue = freeItemsSales.reduce(
+        (sum, item) => sum + item.free_item_quantity * parseFloat(item.unit_price),
+        0
+      );
+
       return {
         success: true,
         data: {
@@ -103,6 +187,17 @@ class DashboardController {
           monthSales: parseFloat(monthSales) || 0,
           totalSalesCount,
           recentSales: plainRecentSales,
+          freeItems: {
+            today: {
+              received: todayFreeItemsReceived,
+              sold: todayFreeItemsSold,
+            },
+            month: {
+              received: monthFreeItemsReceived,
+              sold: monthFreeItemsSold,
+              revenue: monthFreeItemsRevenue,
+            },
+          },
         },
       };
     } catch (error) {

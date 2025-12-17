@@ -39,6 +39,19 @@ router.get(
 );
 
 /**
+ * @route   GET /api/sales/reports/free-items
+ * @desc    Get free items sales report
+ * @access  Private
+ */
+router.get(
+  '/reports/free-items',
+  asyncHandler(async (req, res) => {
+    const result = await SaleController.getFreeItemsSalesReport(req.query);
+    return res.json(result);
+  })
+);
+
+/**
  * @route   GET /api/sales/:id
  * @desc    Get sale by ID
  * @access  Private

@@ -44,6 +44,21 @@ const StockEntry = sequelize.define(
         min: 1,
       },
     },
+    free_quantity: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+      validate: {
+        min: 0,
+      },
+      comment: 'Number of free items received from supplier (e.g., buy 12 get 2 free)',
+    },
+    total_quantity: {
+      type: DataTypes.VIRTUAL,
+      get() {
+        return this.quantity_received + (this.free_quantity || 0);
+      },
+    },
     quantity_remaining: {
       type: DataTypes.INTEGER,
       allowNull: false,
@@ -94,7 +109,9 @@ const StockEntry = sequelize.define(
     updatedAt: 'updated_at',
     hooks: {
       beforeCreate: (stockEntry) => {
-        stockEntry.quantity_remaining = stockEntry.quantity_received;
+        // Set quantity_remaining to include both regular and free items
+        stockEntry.quantity_remaining =
+          stockEntry.quantity_received + (stockEntry.free_quantity || 0);
       },
     },
   }
