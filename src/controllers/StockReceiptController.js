@@ -227,7 +227,7 @@ class StockReceiptController {
           {
             model: User,
             as: 'creator',
-            attributes: ['id', 'full_name'],
+            attributes: ['id', 'username'],
           },
         ],
         order,

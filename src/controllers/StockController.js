@@ -218,17 +218,28 @@ class StockController {
         const deductFromThisBatch = Math.min(entry.quantity_remaining, remainingToDeduct);
 
         // Calculate how many free items vs purchased items are being deducted
-        // First calculate what portion of this batch is free vs purchased
+        // We sell purchased items first, then free items (FIFO cost accounting)
         const totalReceived = entry.quantity_received + (entry.free_quantity || 0);
         const totalSold = totalReceived - entry.quantity_remaining;
 
-        // Calculate remaining free and purchased items
-        let freeRemaining = Math.max(0, (entry.free_quantity || 0) - totalSold);
-        let purchasedRemaining = entry.quantity_remaining - freeRemaining;
+        // Determine what's left: if totalSold <= purchased qty, we haven't touched free items yet
+        let remainingPurchased, remainingFree;
+        if (totalSold <= entry.quantity_received) {
+          // Haven't sold all purchased items yet, so all remaining are split
+          remainingPurchased = entry.quantity_received - totalSold;
+          remainingFree = entry.free_quantity || 0;
+        } else {
+          // All purchased sold, now selling from free items
+          remainingPurchased = 0;
+          remainingFree = Math.max(
+            0,
+            (entry.free_quantity || 0) - (totalSold - entry.quantity_received)
+          );
+        }
 
-        // Deduct from purchased items first, then free items
-        const freeDeducted = Math.min(freeRemaining, deductFromThisBatch);
-        const purchasedDeducted = deductFromThisBatch - freeDeducted;
+        // Deduct from PURCHASED items first, then free items
+        const purchasedDeducted = Math.min(remainingPurchased, deductFromThisBatch);
+        const freeDeducted = deductFromThisBatch - purchasedDeducted;
 
         // Update the stock entry
         await entry.update(
