@@ -30,6 +30,15 @@ const Sale = sequelize.define(
         min: 0,
       },
     },
+    discount_percentage: {
+      type: DataTypes.DECIMAL(5, 2),
+      allowNull: true,
+      defaultValue: null,
+      validate: {
+        min: 0,
+        max: 100,
+      },
+    },
     discount: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,

@@ -17,6 +17,7 @@ class SaleController {
         user_id,
         items,
         discount = 0,
+        discount_percentage,
         tax = 0,
         payment_method = 'cash',
         notes = '',
@@ -115,8 +116,27 @@ class SaleController {
         });
       }
 
+      // Calculate discount amount
+      let discountAmount = 0;
+      let discountPercentage = null;
+
+      // Check if discount is provided as percentage
+      if (discount_percentage !== undefined && discount_percentage !== null) {
+        discountPercentage = parseFloat(discount_percentage);
+        if (discountPercentage < 0 || discountPercentage > 100) {
+          await transaction.rollback();
+          return {
+            success: false,
+            message: 'Discount percentage must be between 0 and 100',
+          };
+        }
+        discountAmount = (subtotal * discountPercentage) / 100;
+      } else if (discount !== undefined && discount !== null) {
+        // Legacy: Fixed discount value (for backward compatibility)
+        discountAmount = parseFloat(discount);
+      }
+
       // Calculate total amount
-      const discountAmount = parseFloat(discount) || 0;
       const taxAmount = parseFloat(tax) || 0;
       const total_amount = subtotal - discountAmount + taxAmount;
 
@@ -126,6 +146,7 @@ class SaleController {
           user_id,
           sale_date: new Date(),
           subtotal,
+          discount_percentage: discountPercentage,
           discount: discountAmount,
           tax: taxAmount,
           total_amount,
@@ -488,10 +509,31 @@ class SaleController {
       }
 
       // Update sale fields
+      // Calculate discount amount based on percentage or fixed value
+      let discountAmount = sale.discount;
+      let discountPercentage = sale.discount_percentage;
+
+      if (updateData.discount_percentage !== undefined) {
+        // New discount as percentage
+        discountPercentage = parseFloat(updateData.discount_percentage);
+        if (discountPercentage < 0 || discountPercentage > 100) {
+          await transaction.rollback();
+          return {
+            success: false,
+            message: 'Discount percentage must be between 0 and 100',
+          };
+        }
+        discountAmount = (newSubtotal * discountPercentage) / 100;
+      } else if (updateData.discount !== undefined) {
+        // Legacy: Fixed discount value
+        discountAmount = parseFloat(updateData.discount);
+        discountPercentage = null;
+      }
+
       const allowedUpdates = {
         subtotal: newSubtotal,
-        discount:
-          updateData.discount !== undefined ? parseFloat(updateData.discount) : sale.discount,
+        discount_percentage: discountPercentage,
+        discount: discountAmount,
         tax: updateData.tax !== undefined ? parseFloat(updateData.tax) : sale.tax,
         payment_method: updateData.payment_method || sale.payment_method,
         payment_status: updateData.payment_status || sale.payment_status,
@@ -957,6 +999,177 @@ class SaleController {
           },
           productBreakdown: [],
         },
+      };
+    }
+  }
+
+  /**
+   * Update sale
+   * @param {Object} saleData - Sale data including id, items, discount, tax, payment_method, payment_status, notes
+   * @returns {Object} Result with success status and updated sale data
+   */
+  async updateSale(saleData) {
+    const transaction = await sequelize.transaction();
+
+    try {
+      const { id, items, discount = 0, tax = 0, payment_method, payment_status, notes } = saleData;
+
+      // Validate required fields
+      if (!id) {
+        await transaction.rollback();
+        return {
+          success: false,
+          message: 'Sale ID is required',
+        };
+      }
+
+      // Find existing sale
+      const existingSale = await Sale.findByPk(id, {
+        include: [
+          {
+            model: SaleItem,
+            as: 'saleItems',
+            include: [
+              {
+                model: Product,
+                as: 'product',
+              },
+              {
+                model: StockEntry,
+                as: 'stockEntry',
+              },
+            ],
+          },
+        ],
+        transaction,
+      });
+
+      if (!existingSale) {
+        await transaction.rollback();
+        return {
+          success: false,
+          message: 'Sale not found',
+        };
+      }
+
+      // Process stock adjustments for changed items
+      if (items && Array.isArray(items)) {
+        // Handle quantity changes and deletions
+        for (const existingItem of existingSale.saleItems) {
+          const updatedItem = items.find((item) => item.id === existingItem.id);
+
+          if (!updatedItem) {
+            // Item removed - return stock
+            await StockEntry.increment(
+              { quantity_remaining: existingItem.quantity },
+              {
+                where: { id: existingItem.stock_entry_id },
+                transaction,
+              }
+            );
+            await existingItem.destroy({ transaction });
+          } else if (updatedItem.quantity !== existingItem.quantity) {
+            // Quantity changed - adjust stock
+            const quantityDiff = updatedItem.quantity - existingItem.quantity;
+            const product = await Product.findByPk(existingItem.product_id, { transaction });
+
+            if (quantityDiff > 0) {
+              // Increased quantity - check if stock available
+              const stockEntry = await StockEntry.findByPk(existingItem.stock_entry_id, {
+                transaction,
+              });
+
+              if (!stockEntry || stockEntry.quantity_remaining < quantityDiff) {
+                await transaction.rollback();
+                return {
+                  success: false,
+                  message: `Insufficient stock for ${product?.name || 'product'}. Available: ${
+                    stockEntry?.quantity_remaining || 0
+                  }, Requested: ${quantityDiff}`,
+                };
+              }
+
+              await StockEntry.decrement(
+                { quantity_remaining: quantityDiff },
+                {
+                  where: { id: existingItem.stock_entry_id },
+                  transaction,
+                }
+              );
+            } else {
+              // Decreased quantity - return stock
+              await StockEntry.increment(
+                { quantity_remaining: Math.abs(quantityDiff) },
+                {
+                  where: { id: existingItem.stock_entry_id },
+                  transaction,
+                }
+              );
+            }
+
+            // Update sale item
+            await existingItem.update(
+              {
+                quantity: updatedItem.quantity,
+                unit_price: updatedItem.unit_price,
+                subtotal: updatedItem.subtotal,
+              },
+              { transaction }
+            );
+          } else if (updatedItem.unit_price !== parseFloat(existingItem.unit_price)) {
+            // Only price changed
+            await existingItem.update(
+              {
+                unit_price: updatedItem.unit_price,
+                subtotal: updatedItem.subtotal,
+              },
+              { transaction }
+            );
+          }
+        }
+      }
+
+      // Calculate new subtotal from items
+      const updatedItems = await SaleItem.findAll({
+        where: { sale_id: id },
+        transaction,
+      });
+
+      const newSubtotal = updatedItems.reduce((sum, item) => sum + parseFloat(item.subtotal), 0);
+
+      // Calculate new totals
+      const totalAmount = newSubtotal - parseFloat(discount) + parseFloat(tax);
+
+      // Update sale
+      await existingSale.update(
+        {
+          subtotal: newSubtotal,
+          discount: parseFloat(discount),
+          tax: parseFloat(tax),
+          total_amount: totalAmount,
+          payment_method: payment_method || existingSale.payment_method,
+          payment_status: payment_status || existingSale.payment_status,
+          notes: notes || existingSale.notes,
+        },
+        { transaction }
+      );
+
+      await transaction.commit();
+
+      // Fetch updated sale with all relations using getSaleById for consistency
+      const updatedSale = await this.getSaleById(id);
+
+      return {
+        success: true,
+        message: 'Sale updated successfully',
+        data: updatedSale.data,
+      };
+    } catch (error) {
+      await transaction.rollback();
+      console.error('SaleController.updateSale error:', error);
+      return {
+        success: false,
+        message: error.message || 'Failed to update sale',
       };
     }
   }
