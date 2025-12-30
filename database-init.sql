@@ -181,6 +181,7 @@ CREATE TABLE sales (
   user_id INT NOT NULL,
   sale_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
   subtotal DECIMAL(10, 2) DEFAULT 0.00 NOT NULL,
+  discount_percentage DECIMAL(5, 2) DEFAULT NULL COMMENT 'Discount as percentage (0-100). If NULL, discount column contains fixed Rs. value (legacy data)',
   discount DECIMAL(10, 2) DEFAULT 0.00 NOT NULL,
   tax DECIMAL(10, 2) DEFAULT 0.00 NOT NULL,
   total_amount DECIMAL(10, 2) NOT NULL,
@@ -193,7 +194,8 @@ CREATE TABLE sales (
   INDEX idx_user (user_id),
   INDEX idx_sale_date (sale_date),
   INDEX idx_payment_method (payment_method),
-  INDEX idx_payment_status (payment_status)
+  INDEX idx_payment_status (payment_status),
+  INDEX idx_discount_percentage (discount_percentage)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================

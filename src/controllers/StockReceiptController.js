@@ -290,7 +290,7 @@ class StockReceiptController {
   }
 
   /**
-   * Update stock receipt (draft only)
+   * Update stock receipt (draft and completed)
    */
   async updateReceipt(id, data) {
     const transaction = await sequelize.transaction();
@@ -302,8 +302,8 @@ class StockReceiptController {
         throw new Error('Receipt not found');
       }
 
-      if (receipt.status !== 'draft') {
-        throw new Error('Only draft receipts can be updated');
+      if (receipt.status === 'cancelled') {
+        throw new Error('Cancelled receipts cannot be updated');
       }
 
       const { header, entries } = data;
