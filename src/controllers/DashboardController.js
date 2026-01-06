@@ -4,9 +4,10 @@ import { Product, Sale, SaleItem, StockEntry } from '../database/models/index.js
 class DashboardController {
   /**
    * Get dashboard summary statistics
+   * @param {number} days - Number of days for trend (7 or 30)
    * @returns {Object} Result with dashboard data
    */
-  async getDashboardSummary() {
+  async getDashboardSummary(days = 7) {
     try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -81,17 +82,10 @@ class DashboardController {
         },
       });
 
-      // Recent sales (last 10)
-      const recentSales = await Sale.findAll({
-        where: {
-          payment_status: 'completed',
-        },
-        order: [['sale_date', 'DESC']],
-        limit: 10,
-        attributes: ['id', 'sale_date', 'total_amount', 'payment_method'],
-      });
-
-      const plainRecentSales = recentSales.map((sale) => sale.toJSON());
+      // Get chart data
+      const salesTrend = await this.getDailySalesTrend(days);
+      const topProducts = await this.getTopSellingProducts(10);
+      const revenueVsProfit = await this.getRevenueVsProfitTrend(days);
 
       // Free items metrics - Today
       const todayFreeItemsReceived =
@@ -186,7 +180,9 @@ class DashboardController {
           expiringSoon,
           monthSales: parseFloat(monthSales) || 0,
           totalSalesCount,
-          recentSales: plainRecentSales,
+          salesTrend,
+          topProducts,
+          revenueVsProfit,
           freeItems: {
             today: {
               received: todayFreeItemsReceived,
@@ -270,51 +266,182 @@ class DashboardController {
   }
 
   /**
-   * Get expiring products
-   * @param {number} days - Number of days to check
-   * @returns {Object} Result with expiring products
+   * Get daily sales trend for chart
+   * @param {number} days - Number of days to retrieve
+   * @returns {Object} Labels and data for line chart
    */
-  async getExpiringProducts(days = 30) {
+  async getDailySalesTrend(days = 7) {
     try {
+      const labels = [];
+      const data = [];
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const futureDate = new Date();
-      futureDate.setDate(futureDate.getDate() + days);
+      for (let i = days - 1; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
 
-      const expiringStock = await StockEntry.findAll({
-        where: {
-          expiry_date: {
-            [Op.lte]: futureDate,
-            [Op.gte]: today,
+        const nextDate = new Date(date);
+        nextDate.setDate(nextDate.getDate() + 1);
+
+        const dayLabel = date.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+        });
+        labels.push(dayLabel);
+
+        const sales = await Sale.sum('total_amount', {
+          where: {
+            sale_date: {
+              [Op.gte]: date,
+              [Op.lt]: nextDate,
+            },
+            payment_status: 'completed',
           },
-          quantity_remaining: {
-            [Op.gt]: 0,
-          },
-        },
+        });
+
+        data.push(parseFloat(sales) || 0);
+      }
+
+      return { labels, data };
+    } catch (error) {
+      console.error('Error in getDailySalesTrend:', error);
+      return { labels: [], data: [] };
+    }
+  }
+
+  /**
+   * Get top selling products
+   * @param {number} limit - Number of products to retrieve
+   * @returns {Object} Labels and data for bar chart
+   */
+  async getTopSellingProducts(limit = 10) {
+    try {
+      // Get all sales items and aggregate by product
+      const saleItems = await SaleItem.findAll({
         include: [
           {
             model: Product,
             as: 'product',
-            attributes: ['id', 'name', 'generic_name', 'category'],
+            attributes: ['name'],
+            required: true,
+          },
+          {
+            model: Sale,
+            as: 'sale',
+            attributes: [],
+            where: {
+              payment_status: 'completed',
+            },
+            required: true,
           },
         ],
-        order: [['expiry_date', 'ASC']],
+        attributes: ['product_id', 'quantity'],
+        raw: true,
       });
 
-      const plainExpiringStock = expiringStock.map((stock) => stock.toJSON());
+      // Aggregate quantities by product
+      const productMap = {};
+      saleItems.forEach((item) => {
+        if (!productMap[item.product_id]) {
+          productMap[item.product_id] = {
+            name: item['product.name'] || 'Unknown',
+            quantity: 0,
+          };
+        }
+        productMap[item.product_id].quantity += item.quantity;
+      });
 
-      return {
-        success: true,
-        data: plainExpiringStock,
-      };
+      // Convert to array and sort by quantity
+      const topProducts = Object.values(productMap)
+        .sort((a, b) => b.quantity - a.quantity)
+        .slice(0, limit);
+
+      const labels = topProducts.map((p) => p.name);
+      const data = topProducts.map((p) => p.quantity);
+
+      return { labels, data };
     } catch (error) {
-      console.error('DashboardController.getExpiringProducts error:', error);
-      return {
-        success: false,
-        message: error.message || 'Failed to fetch expiring products',
-        data: [],
-      };
+      console.error('Error in getTopSellingProducts:', error);
+      return { labels: [], data: [] };
+    }
+  }
+
+  /**
+   * Get revenue vs profit trend
+   * @param {number} days - Number of days to retrieve
+   * @returns {Object} Labels and data for column chart
+   */
+  async getRevenueVsProfitTrend(days = 7) {
+    try {
+      const labels = [];
+      const revenue = [];
+      const profit = [];
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      for (let i = days - 1; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+
+        const nextDate = new Date(date);
+        nextDate.setDate(nextDate.getDate() + 1);
+
+        const dayLabel = date.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+        });
+        labels.push(dayLabel);
+
+        // Get revenue for the day
+        const dailyRevenue = await Sale.sum('total_amount', {
+          where: {
+            sale_date: {
+              [Op.gte]: date,
+              [Op.lt]: nextDate,
+            },
+            payment_status: 'completed',
+          },
+        });
+
+        revenue.push(parseFloat(dailyRevenue) || 0);
+
+        // Calculate profit: sum of (quantity * (unit_price - cost_price))
+        const saleItems = await SaleItem.findAll({
+          include: [
+            {
+              model: Sale,
+              as: 'sale',
+              attributes: [],
+              where: {
+                sale_date: {
+                  [Op.gte]: date,
+                  [Op.lt]: nextDate,
+                },
+                payment_status: 'completed',
+              },
+              required: true,
+            },
+          ],
+          attributes: ['quantity', 'unit_price'],
+          raw: true,
+        });
+
+        // Aggregate profit for the day
+        let dailyProfit = 0;
+        saleItems.forEach((item) => {
+          // Assuming average cost price is 60% of selling price for estimation
+          const costPrice = item.unit_price * 0.6;
+          dailyProfit += item.quantity * (item.unit_price - costPrice);
+        });
+
+        profit.push(dailyProfit);
+      }
+
+      return { labels, revenue, profit };
+    } catch (error) {
+      console.error('Error in getRevenueVsProfitTrend:', error);
+      return { labels: [], revenue: [], profit: [] };
     }
   }
 }

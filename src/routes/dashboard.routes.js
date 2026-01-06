@@ -16,7 +16,8 @@ router.use(authenticate);
 router.get(
   '/summary',
   asyncHandler(async (req, res) => {
-    const result = await DashboardController.getDashboardSummary();
+    const days = parseInt(req.query.days) || 7;
+    const result = await DashboardController.getDashboardSummary(days);
     return res.json(result);
   })
 );
